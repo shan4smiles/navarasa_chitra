@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Navarasa Maṇḍala</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;700&family=Tiro+Devanagari+Hindi&display=swap');
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #0c0c0e;
+            color: #eee;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .heading {
+            font-family: 'Tiro Devanagari Hindi', serif;
+        }
+
+        #container {
+            position: relative;
+            width: 100vw;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 0;
+            /* Important for flex-shrink */
+        }
+
+        svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .sector-label {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            fill: rgba(255, 255, 255, 0.4);
+            font-weight: 300;
+            transition: opacity 1s;
+        }
+
+        .info-panel {
+            position: absolute;
+            bottom: 40px;
+            right: 40px;
+            background: rgba(255, 255, 255, 0.02);
+            backdrop-filter: blur(10px);
+            padding: 24px;
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: right;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            z-index: 20;
+        }
+
+        /* Clear black stroke for Indian Mandala style */
+        .ring-slice {
+            stroke: #000;
+            stroke-width: 1px;
+            stroke-linejoin: round;
+        }
+
+        .petal-border {
+            fill: none;
+            stroke: rgba(0, 0, 0, 1);
+            stroke-width: 0.8px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header class="text-center mt-12 mb-8 flex-shrink-0">
+        <h1 class="heading text-5xl text-orange-400 mb-2">Navarasaḥ Maṇḍala</h1>
+        <p class="text-gray-400 max-w-lg mx-auto">A collective blooming geometry of human emotion.</p>
+    </header>
+
+    <div id="container">
+        <svg id="mandala-svg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet">
+            <defs id="patterns-defs">
+                <pattern id="pattern-earth" width="12" height="12" patternUnits="userSpaceOnUse">
+                    <rect width="9" height="9" x="1.5" y="1.5" fill="none" stroke="currentColor" stroke-width="1.2"
+                        opacity="0.8" />
+                </pattern>
+                <pattern id="pattern-water" width="16" height="10" patternUnits="userSpaceOnUse">
+                    <path d="M0,5 Q4,0 8,5 Q12,10 16,5" fill="none" stroke="currentColor" stroke-width="1.2"
+                        opacity="0.8" />
+                </pattern>
+                <pattern id="pattern-fire" width="10" height="10" patternUnits="userSpaceOnUse">
+                    <path d="M0,10 L5,0 L10,10" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.8" />
+                </pattern>
+                <pattern id="pattern-air" width="12" height="12" patternUnits="userSpaceOnUse">
+                    <circle cx="6" cy="6" r="4" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.8" />
+                </pattern>
+                <pattern id="pattern-space" width="6" height="6" patternUnits="userSpaceOnUse">
+                    <circle cx="3" cy="3" r="1.5" fill="currentColor" opacity="0.8" />
+                </pattern>
+            </defs>
+            <!-- Background Geometry -->
+            <g id="master-group" transform="translate(500, 500)">
+                <g id="bg-group"></g>
+                <!-- Data Layers -->
+                <g id="main-group"></g>
+            </g>
+        </svg>
+    </div>
+
+    <div class="info-panel">
+        <div id="participant-count" class="text-3xl font-bold text-white">0</div>
+        <div class="text-xs text-gray-500 uppercase tracking-widest">Shared Hearts</div>
+    </div>
+
+    <script>
+        const rasas = ['shringara', 'hasya', 'karuna', 'raudra', 'veera', 'bhayanaka', 'bibhatsa', 'adbhuta', 'shanta'];
+        const rasaNames = {
+            'shringara': 'Love',
+            'hasya': 'Joy',
+            'karuna': 'Compassion',
+            'raudra': 'Anger',
+            'veera': 'Heroism',
+            'bhayanaka': 'Fear',
+            'bibhatsa': 'Disgust',
+            'adbhuta': 'Wonder',
+            'shanta': 'Peace'
+        };
+
+        const innerRadius = 50;
+        const ringHeight = 35; // The vertical height of a petal
+        const ringGap = 15;    // The gap between rings (Increase this to 20, 30 etc. to experiment)
+        const petalBreadth = 60; // Fixed physical breadth in pixels
+        const baseViewportRadius = 420;
+
+        const svg = d3.select("#mandala-svg");
+        const masterGroup = d3.select("#master-group");
+        const mainGroup = d3.select("#main-group");
+        const bgGroup = d3.select("#bg-group");
+
+        // Fixed angular slices logic
+        const angleStep = (2 * Math.PI) / 9;
+
+        // Initialize background lines and labels
+        const labelGroup = bgGroup.append("g").attr("id", "label-group");
+
+        rasas.forEach((r, i) => {
+            const angle = i * angleStep;
+            bgGroup.append("line")
+                .attr("class", "bg-line")
+                .attr("x1", 0).attr("y1", 0)
+                .attr("x2", 0).attr("y2", -2000)
+                .attr("transform", `rotate(${(angle * 180 / Math.PI)})`)
+                .attr("stroke", "rgba(255,255,255,0.03)")
+                .attr("stroke-dasharray", "4,4");
+        });
+
+        // Seed the labels with data for d3 selection
+        labelGroup.selectAll(".sector-label")
+            .data(rasas)
+            .enter()
+            .append("text")
+            .attr("class", "sector-label")
+            .attr("text-anchor", "middle")
+            .attr("dominant-baseline", "middle")
+            .text(r => rasaNames[r]);
+
+        // Refined Onion Dome Path Generator
+        // This version ensures the geometry stays clean as it scales out
+        // onionDomePath creates a traditional wide, low-height pointed petal with CONSTANT size
+        // onionDomePath creates a traditional wide, low-height pointed petal
+        function onionDomePath(rBase, rPeak, centerAngle, arcSpan) {
+            const sA = centerAngle - arcSpan / 2;
+            const eA = centerAngle + arcSpan / 2;
+
+            // Base points
+            const x1 = rBase * Math.sin(sA);
+            const y1 = -rBase * Math.cos(sA);
+            const x2 = rBase * Math.sin(eA);
+            const y2 = -rBase * Math.cos(eA);
+
+            // Tip point
+            const tx = rPeak * Math.sin(centerAngle);
+            const ty = -rPeak * Math.cos(centerAngle);
+
+            const rMid = rBase + (rPeak - rBase) * 0.45;
+            const w = eA - sA;
+
+            // Tight control points to preserve the 'Onion' curves symmetrically
+            const cp1x = rMid * Math.sin(sA - w * 0.02);
+            const cp1y = -rMid * Math.cos(sA - w * 0.02);
+            const cp2x = rMid * Math.sin(centerAngle - w * 0.1);
+            const cp2y = -rMid * Math.cos(centerAngle - w * 0.1);
+            const cp3x = rMid * Math.sin(centerAngle + w * 0.1);
+            const cp3y = -rMid * Math.cos(centerAngle + w * 0.1);
+            const cp4x = rMid * Math.sin(eA + w * 0.02);
+            const cp4y = -rMid * Math.cos(eA + w * 0.02);
+
+            return `M ${x1} ${y1} 
+                    A ${rBase} ${rBase} 0 0 1 ${x2} ${y2}
+                    C ${cp4x} ${cp4y} ${cp3x} ${cp3y} ${tx} ${ty}
+                    C ${cp2x} ${cp2y} ${cp1x} ${cp1y} ${x1} ${y1} Z`;
+        }
+
+        async function updateMandala() {
+            try {
+                const res = await fetch('/state');
+                const submissions = await res.json();
+                const numSubmissions = submissions.length;
+
+                document.getElementById('participant-count').innerText = numSubmissions;
+
+                // --- 1. Rescale Logic (Infinite Bloom) ---
+                const outerRadius = innerRadius + numSubmissions * (ringHeight + ringGap);
+                let currentScale = 1;
+                if (outerRadius > baseViewportRadius) {
+                    currentScale = baseViewportRadius / outerRadius;
+                }
+
+                masterGroup.transition().duration(2000)
+                    .attr("transform", `translate(500, 500) scale(${currentScale})`);
+
+                // --- 1a. Reposition Labels ---
+                const labelMargin = 50;
+                mainGroup.select("#label-group").selectAll(".sector-label") // Move selector if needed or use ID
+                    .data(rasas)
+                    .transition().duration(2000)
+                    .attr("transform", (d, i) => {
+                        const angle = (i + 0.5) * angleStep;
+                        const r = outerRadius + labelMargin;
+                        return `rotate(${angle * 180 / Math.PI}) translate(0, ${-r})`;
+                    });
+
+                // Correction: Use the correct selection for labels 
+                d3.select("#label-group").selectAll(".sector-label")
+                    .transition().duration(2000)
+                    .attr("transform", (d, i) => {
+                        const angle = (i + 0.5) * angleStep;
+                        const r = outerRadius + labelMargin;
+                        return `rotate(${angle * 180 / Math.PI}) translate(0, ${-r})`;
+                    });
+
+                // Adjust label opacity as they get too small? Or just let them rescale.
+                // The user wants "Infinite" so we rescale everything.
+
+                // Prepare Data - Multi-petal expansion
+                const allPetals = [];
+                submissions.forEach((sub, ringIndex) => {
+                    const rBase = innerRadius + ringIndex * (ringHeight + ringGap);
+                    const rPeak = rBase + ringHeight;
+
+                    // Calculate how many petals fit in a 40-degree sector at this radius
+                    // This ensures the size stays constant (~petalBreadth) but fills the circle
+                    const sectorArcWidth = (2 * Math.PI / 9) * rBase;
+                    const petalsPerSector = Math.max(1, Math.round(sectorArcWidth / petalBreadth));
+                    const actualArcSpan = (2 * Math.PI / 9) / petalsPerSector;
+
+                    rasas.forEach((rasaId, rasaIndex) => {
+                        const userPetal = sub.petals.find(p => p.rasa === rasaId);
+                        const sectorStartAngle = rasaIndex * angleStep;
+
+                        for (let pIdx = 0; pIdx < petalsPerSector; pIdx++) {
+                            const petalCenterAngle = sectorStartAngle + (pIdx + 0.5) * actualArcSpan;
+                            allPetals.push({
+                                subId: sub.id || ringIndex,
+                                ringIndex: ringIndex,
+                                rasa: rasaId,
+                                pIdx: pIdx,
+                                centerAngle: petalCenterAngle,
+                                arcSpan: actualArcSpan,
+                                color: userPetal ? userPetal.color : 'transparent',
+                                element: userPetal ? userPetal.element : null,
+                                active: !!userPetal
+                            });
+                        }
+                    });
+                });
+
+                // --- 2. Render Petals ---
+                const rings = mainGroup.selectAll(".ring-slice")
+                    .data(allPetals, d => `${d.subId}-${d.rasa}-${d.pIdx}`);
+
+                rings.enter()
+                    .append("path")
+                    .attr("class", "ring-slice")
+                    .attr("opacity", 0)
+                    .merge(rings)
+                    .transition().duration(1500)
+                    .attr("opacity", d => d.active ? 1 : 0.05)
+                    .attr("d", d => {
+                        const rBase = innerRadius + d.ringIndex * (ringHeight + ringGap);
+                        const rPeak = rBase + ringHeight;
+                        return onionDomePath(rBase, rPeak, d.centerAngle, d.arcSpan);
+                    })
+                    .attr("fill", d => d.color);
+
+                // --- 3. Patterns ---
+                const textures = mainGroup.selectAll(".ring-texture")
+                    .data(allPetals.filter(p => p.active), d => `${d.subId}-${d.rasa}-${d.pIdx}-tex`);
+
+                textures.enter()
+                    .append("path")
+                    .attr("class", "ring-texture")
+                    .attr("pointer-events", "none")
+                    .attr("opacity", 0)
+                    .merge(textures)
+                    .transition().duration(1500)
+                    .attr("opacity", 1)
+                    .attr("d", d => {
+                        const rBase = innerRadius + d.ringIndex * (ringHeight + ringGap);
+                        const rPeak = rBase + ringHeight;
+                        return onionDomePath(rBase, rPeak, d.centerAngle, d.arcSpan);
+                    })
+                    .attr("fill", d => `url(#pattern-${d.element})`)
+                    .attr("color", d => d.color);
+
+                // --- 4. Outlines ---
+                const outlines = mainGroup.selectAll(".petal-border")
+                    .data(allPetals, d => `${d.subId}-${d.rasa}-${d.pIdx}-line`);
+
+                outlines.enter()
+                    .append("path")
+                    .attr("class", "petal-border")
+                    .merge(outlines)
+                    .transition().duration(1500)
+                    .attr("d", d => {
+                        const rBase = innerRadius + d.ringIndex * (ringHeight + ringGap);
+                        const rPeak = rBase + ringHeight;
+                        return onionDomePath(rBase, rPeak, d.centerAngle, d.arcSpan);
+                    })
+                    .attr("stroke", d => d.active ? "#000" : "rgba(255,255,255,0.03)");
+
+            } catch (e) { console.error(e); }
+        }
+
+        setInterval(updateMandala, 4000);
+        updateMandala();
+    </script>
+</body>
+
+</html>
